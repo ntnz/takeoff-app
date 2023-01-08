@@ -1,118 +1,167 @@
 import "./App.css";
 import plan from "./plan.jpg";
 import { Path } from "jad";
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 
-const Measure = ({ canvas, pxPerUnit, setPxPerUnit }) => {
+const Measure = ({
+  id,
+  className,
+  activeMeasure,
+  setActiveMeasure,
+  container,
+  pxToMm,
+  setPxToMm,
+}) => {
   const units = ["MILLIMETERS", "CENTIMETERS", "METERS"];
   const [unit, setUnit] = useState(units[0]);
+  const colors = ["red", "green", "blue"];
+  const [color, setColor] = useState(colors[0]);
 
-  const path = new Path({
-    canvas,
-    // 663px = 1m
-    unit,
-    pxPerUnit,
-    active: true,
-    coordinates: {
-      a: {
-        x: 0.2,
-        y: 0.2,
-      },
-      b: {
-        x: 0.1,
-        y: 0.1,
-      },
+  const [coordinates, setCoordinates] = useState();
+  const active = activeMeasure === id;
+
+  useEffect(
+    function setupListener() {
+      const path = new Path({
+        container,
+        active,
+        color,
+        coordinates,
+        onUpdate: (xy, length) => {
+          setCoordinates(xy);
+
+          // 663px = 1m
+          // the scale is a percentage figure that determines the constant multiplier between different units
+          // if we are the scale measure, we ask for what length the line is. We can then say "663px = 1m" for example
+          // this would mean storing the pxToMm value of 663px
+          // we can then use this to calculate all our other metric figures from
+          if (setPxToMm !== undefined) setPxToMm(length);
+        },
+      });
+
+      return function cleanupListener() {
+        path.destroy();
+      };
     },
-    onUpdate: (xy, length) => {
-      console.log("scale changed", xy, length);
-      if (setPxPerUnit !== undefined) setPxPerUnit(length);
-    },
-  });
+    [color, active, coordinates, container, id, setPxToMm]
+  );
 
-  return <div>wee</div>;
-};
+  return (
+    <div
+      className={`flex flex-col p-3 rounded ${active && "outline"} ${
+        className || ""
+      }`}
+      style={{ outlineColor: color }}
+    >
+      <select
+        className="select m-1"
+        value={color}
+        onChange={(e) => setColor(e.target.value)}
+      >
+        <option></option>
+        {colors.map((color) => (
+          <option key={color} value={color}>
+            {color}
+          </option>
+        ))}
+      </select>
 
-const getCanvas = () => {
-  const canvas = document.querySelector("#canvas");
-  canvas.width = window.innerWidth - 300;
-  canvas.height = window.innerHeight;
-
-  return canvas;
+      <select
+        className="select m-1"
+        value={unit}
+        onChange={(e) => setUnit(e.target.value)}
+      >
+        <option></option>
+        {units.map((unit) => (
+          <option key={unit} value={unit}>
+            {unit}
+          </option>
+        ))}
+      </select>
+      <button
+        type="button"
+        className="btn btn-sm btn-secondary mt-3"
+        onClick={() => setActiveMeasure(id)}
+      >
+        Select
+      </button>
+    </div>
+  );
 };
 
 function App() {
-  const [measures, setMeasures] = useState([]);
-  const [scaleMeasure, setScaleMeasure] = useState();
-  const [pxPerUnit, setPxPerUnit] = useState();
-
-  const onAddScale = () => {
-    const canvas = getCanvas();
-
-    setScaleMeasure(
-      <Measure
-        canvas={canvas}
-        setPxPerUnit={setPxPerUnit}
-        pxPerUnit={pxPerUnit}
-      />
-    );
-  };
+  const [canvasContainer, setCanvasContainer] = useState();
+  const [measureIds, setMeasureIds] = useState([]);
+  const [pxToMm, setPxToMm] = useState();
+  const [activeMeasure, setActiveMeasure] = useState("scale");
 
   const onAddMeasure = () => {
-    const canvas = getCanvas();
+    const measureId = String(Math.random());
 
-    setMeasures([
-      ...measures,
-      <Measure canvas={canvas} pxPerUnit={pxPerUnit} />,
-    ]);
+    setMeasureIds([...measureIds, measureId]);
+    setActiveMeasure(measureId);
   };
 
+  // init the canvas
   window.addEventListener("load", () => {
-    const canvas = document.querySelector("#canvas");
-    canvas.width = window.innerWidth - 300;
-    canvas.height = window.innerHeight;
+    const canvasContainer = document.querySelector("#canvas-container");
 
-    new Path({
-      canvas,
-      // 663px = 1m
-      pxPerUnit: 663,
-      active: true,
-      coordinates: {
-        a: {
-          x: 0.2,
-          y: 0.2,
-        },
-        b: {
-          x: 0.1,
-          y: 0.1,
-        },
-      },
-      onUpdate: (xy, length) => console.log(xy, length),
-    });
+    setCanvasContainer(canvasContainer);
   });
 
   return (
     <div className="flex">
-      <div className="flex flex-1 flex-col border-r p-6 bg-base-200">
-        {measures}
-        <button type="button" className="btn m-1" onClick={() => onAddScale()}>
-          Add scale
-        </button>
-        <button
-          type="button"
-          className="btn m-1"
-          onClick={() => onAddMeasure()}
-        >
-          Add new
-        </button>
+      <div className="flex w-96 h-screen overflow-y-auto flex-col border-r p-6 bg-base-200">
+        {canvasContainer ? (
+          <div>
+            {/* the scale measure is always rendered */}
+            <h3 className="text-xl font-bold">Scale</h3>
+            <Measure
+              className="mt-3"
+              key={"scale"}
+              id={"scale"}
+              container={canvasContainer}
+              pxToMm={pxToMm}
+              setPxToMm={setPxToMm}
+              activeMeasure={activeMeasure}
+              setActiveMeasure={setActiveMeasure}
+            />
+            {/* render all the measures */}
+
+            <h3 className="text-xl font-bold mt-6">Measurements</h3>
+            {measureIds.map((id) => (
+              <Measure
+                className="mt-3"
+                key={id}
+                id={id}
+                container={canvasContainer}
+                pxToMm={pxToMm}
+                activeMeasure={activeMeasure}
+                setActiveMeasure={setActiveMeasure}
+              />
+            ))}
+            <button
+              type="button"
+              className="btn btn-primary m-1 mt-3"
+              onClick={() => onAddMeasure()}
+            >
+              Add measurement
+            </button>
+          </div>
+        ) : (
+          <div>loading</div>
+        )}
       </div>
-      <canvas
-        id="canvas"
+      <div
+        id="canvas-container"
+        className="flex-1"
         style={{
+          height: "100vh",
           backgroundImage: `url(${plan})`,
           backgroundRepeat: "no-repeat",
           backgroundSize: "contain",
         }}
-      ></canvas>
+      ></div>
     </div>
   );
 }
