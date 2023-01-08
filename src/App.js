@@ -3,22 +3,50 @@ import plan from "./plan.jpg";
 import { Path } from "jad";
 import { useState, useEffect, useRef } from "react";
 
+const calculateValueFromPx = (pxToUnit, pxLength, unit) => {
+  // TODO deal with unit conversions
+  return (pxLength / pxToUnit.px) * pxToUnit.value;
+};
+
 const Measure = ({
   id,
   className,
   activeMeasure,
   setActiveMeasure,
   container,
-  pxToMm,
-  setPxToMm,
+  pxToUnit,
+  setPxToUnit,
 }) => {
   const units = ["MILLIMETERS", "CENTIMETERS", "METERS"];
   const [unit, setUnit] = useState(units[0]);
   const colors = ["red", "green", "blue"];
   const [color, setColor] = useState(colors[0]);
 
+  const [value, setValue] = useState(0);
+  const [pxLength, setPxLength] = useState(0);
+
   const [coordinates, setCoordinates] = useState();
   const active = activeMeasure === id;
+
+  useEffect(() => {
+    // this only happens for regular measurements, not the scale measure
+    if (setPxToUnit) return;
+
+    if (pxLength && pxToUnit && unit) {
+      setValue(calculateValueFromPx(pxToUnit, pxLength, unit));
+    }
+  }, [setPxToUnit, pxLength, pxToUnit, unit]);
+
+  useEffect(() => {
+    // 663px = 1m
+    // the scale is a percentage figure that determines the ratio between pixels and a known unit
+    // if we are the scale measure, we ask for what length the line is. We can then say "663px = 1m" for example
+    // this would mean storing the pxToMm value of 663px
+    // we can then use this to calculate all our other metric figures from
+    if (setPxToUnit !== undefined) {
+      setPxToUnit({ px: pxLength, unit, value });
+    }
+  }, [setPxToUnit, unit, pxLength, value]);
 
   useEffect(
     function setupListener() {
@@ -27,15 +55,9 @@ const Measure = ({
         active,
         color,
         coordinates,
-        onUpdate: (xy, length) => {
-          setCoordinates(xy);
-
-          // 663px = 1m
-          // the scale is a percentage figure that determines the constant multiplier between different units
-          // if we are the scale measure, we ask for what length the line is. We can then say "663px = 1m" for example
-          // this would mean storing the pxToMm value of 663px
-          // we can then use this to calculate all our other metric figures from
-          if (setPxToMm !== undefined) setPxToMm(length);
+        onUpdate: (coordinates, pxLength) => {
+          setCoordinates(coordinates);
+          setPxLength(pxLength);
         },
       });
 
@@ -43,7 +65,7 @@ const Measure = ({
         path.destroy();
       };
     },
-    [color, active, coordinates, container, id, setPxToMm]
+    [color, active, coordinates, container, id, setPxToUnit]
   );
 
   return (
@@ -66,6 +88,12 @@ const Measure = ({
         ))}
       </select>
 
+      <input
+        className="input m-1"
+        value={value}
+        onChange={(e) => setValue(Number(e.target.value))}
+        type="number"
+      />
       <select
         className="select m-1"
         value={unit}
@@ -92,7 +120,11 @@ const Measure = ({
 function App() {
   const [canvasContainer, setCanvasContainer] = useState();
   const [measureIds, setMeasureIds] = useState([]);
-  const [pxToMm, setPxToMm] = useState();
+  const [pxToUnit, setPxToUnit] = useState({
+    px: 0,
+    unit: undefined,
+    value: 0,
+  });
   const [activeMeasure, setActiveMeasure] = useState("scale");
 
   const onAddMeasure = () => {
@@ -121,8 +153,8 @@ function App() {
               key={"scale"}
               id={"scale"}
               container={canvasContainer}
-              pxToMm={pxToMm}
-              setPxToMm={setPxToMm}
+              pxToUnit={pxToUnit}
+              setPxToUnit={setPxToUnit}
               activeMeasure={activeMeasure}
               setActiveMeasure={setActiveMeasure}
             />
@@ -135,7 +167,7 @@ function App() {
                 key={id}
                 id={id}
                 container={canvasContainer}
-                pxToMm={pxToMm}
+                pxToUnit={pxToUnit}
                 activeMeasure={activeMeasure}
                 setActiveMeasure={setActiveMeasure}
               />
